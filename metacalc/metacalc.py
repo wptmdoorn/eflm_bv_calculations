@@ -9,12 +9,13 @@ output_path = "out/dump.xlsx"
 
 # open page
 page = requests.get(url)
-
 soup = BeautifulSoup(page.content, "html.parser")
 
+# open table
 table = soup.find("tbody")
 table_rows = table.find_all("tr")
 
+# process raw table
 res = []
 for tr in table_rows:
     td = tr.find_all("td")
@@ -27,12 +28,10 @@ temporary_df = pd.DataFrame(
     columns=["ID", "Marker", "Matrix", "BV", "Median", "Low", "High", "Date", "Tools"],
 )
 
+# process final table
 combined_rows = []
-
 for name, rows in temporary_df.groupby("Marker"):
     _row = [rows.iloc[0, 1], rows.iloc[0, 2]] + [-1] * 6
-    print(_row)
-    print(len(_row))
 
     for row_index, row in rows.iterrows():
         if row["BV"] == "Between-subject":
