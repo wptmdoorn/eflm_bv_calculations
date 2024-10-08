@@ -1,58 +1,49 @@
 # imports
-import requests
-from bs4 import BeautifulSoup
 import pandas as pd
+import urllib.request
+import json
 
 # define url and output path
-url = "https://biologicalvariation.eu/meta_calculations"
+url = "https://biologicalvariation.eu/api/meta_calculations"
 output_path = "out/dump.xlsx"
 
-# open page
-page = requests.get(url)
-soup = BeautifulSoup(page.content, "html.parser")
-
-# open table
-table = soup.find("tbody")
-table_rows = table.find_all("tr")
-
-# process raw table
 res = []
-for tr in table_rows:
-    td = tr.find_all("td")
-    row = [tr.text.strip() for tr in td if tr.text]
-    if row:
-        res.append(row)
 
-temporary_df = pd.DataFrame(
-    res,
-    columns=["ID", "Marker", "Matrix", "BV", "Median", "Low", "High", "Date", "Tools"],
-)
+with urllib.request.urlopen(url) as url:
+    data = json.load(url)
+    print(data)
 
-# process final table
-combined_rows = []
-for name, rows in temporary_df.groupby("Marker"):
-    _row = [rows.iloc[0, 1], rows.iloc[0, 2]] + [-1] * 6
+if data["code"] == "success":
+    table = data["data"]
 
-    for row_index, row in rows.iterrows():
-        if row["BV"] == "Between-subject":
-            _row[5:8] = [float(x) for x in (row["Median"], row["Low"], row["High"])]
-        elif row["BV"] == "Within-subject":
-            _row[2:5] = [float(x) for x in (row["Median"], row["Low"], row["High"])]
+    for t in table:
+        analyte = {
+            "id": t["analyte"]["id"],
+            "display_name": t["analyte"]["display_name"].strip(),
+            "matrix": t["metas"][0]["matrix"]["matrix_expansion"] if "matrix" in t["metas"][0] else -1,
+            "BV_within_median": -1,
+            "BV_within_low": -1,
+            "BV_within_high": -1,
+            "BV_between_median": -1,
+            "BV_between_low": -1,
+            "BV_between_high": -1,
+        }
 
-    combined_rows.append(_row)
+        # cvi = within, cvg = between
+        for meta in t["metas"]:
+            if meta["var_type"] == ":cvi":
+                analyte["BV_within_median"] = meta["median"]
+                analyte["BV_within_low"] = float(meta["lower"])
+                analyte["BV_within_high"] = float(meta["upper"])
+            elif meta["var_type"] == ":cvg":
+                analyte["BV_between_median"] = meta["median"]
+                analyte["BV_between_low"] = float(meta["lower"])
+                analyte["BV_between_high"] = float(meta["upper"])
 
-df = pd.DataFrame(
-    combined_rows,
-    columns=[
-        "Marker",
-        "Matrix",
-        "BV_within_median",
-        "BV_within_low",
-        "BV_within_high",
-        "BV_between_median",
-        "BV_between_low",
-        "BV_between_high",
-    ],
+        res.append(analyte)
+
+df = pd.DataFrame.from_dict(
+    res
 )
 
 # aps calculations
